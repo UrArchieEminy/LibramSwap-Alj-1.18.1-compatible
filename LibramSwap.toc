@@ -1,0 +1,5 @@
+## Interface: 11200
+## Title: LibramSwap Aljeron
+## Notes: Automatically swaps relics (Librams/Idols/Totems) for Paladin, Druid, and Shaman spells
+## SavedVariables: LibramSwapDb
+LibramSwap.lua
