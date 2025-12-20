@@ -15,6 +15,7 @@ Supports casts via action bar, macros, spellbook, and addons.
 All commands support: `/libramswap`, `/lswap`, or `/ls`
 
 ### Basic Commands
+
 - `/ls` - Toggle on/off
 - `/ls on` / `/ls off` - Enable/Disable
 - `/ls spam` - Toggle swap messages
@@ -24,13 +25,14 @@ All commands support: `/libramswap`, `/lswap`, or `/ls`
 ## Paladin
 
 ### Configurable Spells
+
 - `/ls consecration [faithful / farraki]`
 - `/ls holystrike [eternal / radiance]`
 
 ### Supported Spells & Librams
 
 | Spell | Libram |
-|-------|--------|
+| --- | --- |
 | Consecration | Libram of the Faithful / Farraki Zealot |
 | Holy Shield | Libram of the Dreamguard |
 | Holy Light | Libram of Radiance |
@@ -48,6 +50,7 @@ All commands support: `/libramswap`, `/lswap`, or `/ls`
 ## Druid
 
 ### Configurable Spells
+
 - `/ls rip [emerald / laceration / savagery]`
 - `/ls bite [emerald / laceration]`
 - `/ls rake [ferocity / savagery]`
@@ -57,7 +60,7 @@ All commands support: `/libramswap`, `/lswap`, or `/ls`
 ### Supported Spells & Idols
 
 | Spell | Idol |
-|-------|------|
+| --- | --- |
 | Rip | Idol of the Emerald Rot / Laceration / Savagery |
 | Ferocious Bite | Idol of the Emerald Rot / Laceration |
 | Rake | Idol of Ferocity / Savagery |
@@ -66,6 +69,7 @@ All commands support: `/libramswap`, `/lswap`, or `/ls`
 | Starfire | Idol of Ebb and Flow |
 | Regrowth | Idol of the Forgotten Wilds |
 | Savage Bite / Shred | Idol of the Moonfang |
+| Claw | Idol of Ferocity |
 | Form Shifting | Idol of the Wildshifter |
 | Aquatic Form | Idol of Fluidity |
 | Maul / Swipe | Idol of Brutality |
@@ -78,6 +82,7 @@ All commands support: `/libramswap`, `/lswap`, or `/ls`
 ## Shaman
 
 ### Configurable Spells
+
 - `/ls earthshock [broken / stone / rage / rotten]`
 - `/ls frostshock [stone / rage]`
 - `/ls flameshock [stone / rage / flicker]`
@@ -89,7 +94,7 @@ All commands support: `/libramswap`, `/lswap`, or `/ls`
 ### Supported Spells & Totems
 
 | Spell | Totem |
-|-------|-------|
+| --- | --- |
 | Earth Shock | Totem of Broken Earth / Stone Breaker / Rage / Rotten Roots |
 | Frost Shock | Totem of the Stone Breaker / Rage |
 | Flame Shock | Totem of the Stone Breaker / Rage / Endless Flicker |
@@ -100,13 +105,14 @@ All commands support: `/libramswap`, `/lswap`, or `/ls`
 | Chain Lightning | Totem of the Storm |
 | Strength of Earth / Grace of Air | Totem of Earthstorm |
 | Molten Blast | Totem of Eruption |
-| Healing/Mana Stream, Fire Resist | Totem of Flowing Water |
 | Hex | Totem of Bad Mojo |
 
 ### Special: Reincarnation
+
 When HP <= 5% and Reincarnation is ready, automatically equips **Totem of Rebirth**.
 
 ## Notes
+
 - `/ls` may conflict with LazyScript - use `/lswap` instead if needed
 - Swaps are blocked during vendor/bank/trade interactions
 - Judgement swap only triggers at <=35% target HP
