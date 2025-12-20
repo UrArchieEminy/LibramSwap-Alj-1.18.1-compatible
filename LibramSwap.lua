@@ -17,9 +17,14 @@ local GetActionText         = GetActionText
 local GetTime               = GetTime
 local string_find           = string.find
 local BOOKTYPE_SPELL        = BOOKTYPE_SPELL or "spell"
+local BOOKTYPE_PET          = BOOKTYPE_PET or "pet"
+local BOOK_TYPES            = { BOOKTYPE_SPELL, BOOKTYPE_PET }
 
 -- Relic slot (libram/idol/totem) is slot 18 in Vanilla/Turtle
 local RELIC_SLOT = 18
+
+-- Spells that should avoid GCD-triggering equip methods (cat spam like Claw)
+local NO_GCD_SWAP_SPELLS = { ["Claw"] = true }
 
 -- === Bag Index ===
 local NameIndex   = {}  -- [itemName] = {bag=#, slot=#, link="|Hitem:..|h[Name]|h|r"}
@@ -167,6 +172,7 @@ local DRUID_FIXED_MAP = {
     ["Regrowth"]           = { "Idol of the Forgotten Wilds" },
     ["Savage Bite"]        = { "Idol of the Moonfang" },
     ["Shred"]              = { "Idol of the Moonfang" },
+    ["Claw"]               = { "Idol of Ferocity" },
 
     ["Bear Form"]          = { "Idol of the Wildshifter" },
     ["Dire Bear Form"]     = { "Idol of the Wildshifter" },
@@ -230,9 +236,6 @@ local SHAMAN_FIXED_MAP = {
     ["Strength of Earth Totem"] = { "Totem of Earthstorm" },
     ["Grace of Air"]            = { "Totem of Earthstorm" },
     ["Molten Blast"]            = { "Totem of Eruption" },
-    ["Healing Stream Totem"]    = { "Totem of Flowing Water" },
-    ["Mana Stream Totem"]       = { "Totem of Flowing Water" },
-    ["Fire Resistance Totem"]   = { "Totem of Flowing Water" },
     ["Hex"]                     = { "Totem of Bad Mojo" },
     ["Chain Lightning"]         = { "Totem of the Storm" }
 }
@@ -379,8 +382,17 @@ end)
 -- =====================
 -- Rank-aware spell parsing
 -- =====================
+local function NormalizeSpellName(name)
+    if not name then return nil end
+    name = string.gsub(name, "^%s*!", "")
+    name = string.gsub(name, "^%s+", "")
+    name = string.gsub(name, "%s+$", "")
+    return name
+end
+
 local function SplitNameAndRank(spellSpec)
     if not spellSpec then return nil, nil end
+    spellSpec = NormalizeSpellName(spellSpec)
     local _, _, base, rnum = string_find(spellSpec, "^(.-)%s*%(%s*[Rr][Aa][Nn][Kk]%s*(%d+)%s*%)%s*$")
     if base then
         return (string.gsub(base, "%s+$", "")), ("Rank " .. rnum)
@@ -389,8 +401,8 @@ local function SplitNameAndRank(spellSpec)
 end
 
 -- gets spell readiness by ID
-local function IsSpellReadyById(spellId)
-    local start, duration, enabled = GetSpellCooldown(spellId, BOOKTYPE_SPELL)
+local function IsSpellReadyById(spellId, bookType)
+    local start, duration, enabled = GetSpellCooldown(spellId, bookType or BOOKTYPE_SPELL)
     if not (start and duration) then return false end
     if enabled == 0 then return false end
     if start == 0 or duration == 0 then return true end
@@ -400,27 +412,61 @@ end
 
 -- Accepts: "Name" or "Name(Rank X)". If a rank is specified, require that exact rank.
 local function IsSpellReady(spellSpec)
-    local spellId = SpellCache[spellSpec]
+    local cache = SpellCache[spellSpec]
+    local spellId = cache and cache.id or nil
+    local bookType = cache and cache.bookType or nil
+    local base, reqRank = nil, nil
+
+    if spellId and bookType then
+        base, reqRank = SplitNameAndRank(spellSpec)
+        if not base then return false end
+        local n, r = GetSpellName(spellId, bookType)
+        if (not n) or (n ~= base) or (reqRank and r ~= reqRank) then
+            spellId = nil
+            bookType = nil
+        end
+    end
 
     if not spellId then
-        local base, reqRank = SplitNameAndRank(spellSpec)
+        if not base then
+            base, reqRank = SplitNameAndRank(spellSpec)
+        end
         if not base then return false end
 
-        for i = 1, 300 do
-            local name, rank = GetSpellName(i, BOOKTYPE_SPELL)
-            if not name then break end
-            local nameMatches = (name == base)
-            local rankMatches = (not reqRank) or (rank and rank == reqRank)
-            if nameMatches and rankMatches then
-                spellId = i
-                SpellCache[spellSpec] = i
-                break
+        for _, bt in ipairs(BOOK_TYPES) do
+            for i = 1, 300 do
+                local name, rank = GetSpellName(i, bt)
+                if not name then break end
+                local nameMatches = (name == base)
+                local rankMatches = (not reqRank) or (rank and rank == reqRank)
+                if nameMatches and rankMatches then
+                    spellId = i
+                    bookType = bt
+                    SpellCache[spellSpec] = { id = i, bookType = bt }
+                    break
+                end
             end
+            if spellId then break end
         end
     end
 
     if not spellId then return false end
-    return IsSpellReadyById(spellId)
+    return IsSpellReadyById(spellId, bookType)
+end
+
+local function FindSpellIdByName(name, rank)
+    name = NormalizeSpellName(name)
+    if not name then return nil, nil end
+    for _, bt in ipairs(BOOK_TYPES) do
+        for i = 1, 300 do
+            local n, r = GetSpellName(i, bt)
+            if not n then break end
+            if n == name and (not rank or rank == "" or r == rank) then
+                return i, bt
+            end
+        end
+    end
+    return nil, nil
 end
 
 -- =====================
@@ -506,7 +552,24 @@ local function EquipRelicForSpell(spellName, itemName)
     local bag, slot = HasItemInBags(itemName)
     if bag and slot then
         if CursorHasItem and CursorHasItem() then return false end
-        UseContainerItem(bag, slot)
+        if NO_GCD_SWAP_SPELLS[spellName] and PickupContainerItem and PickupInventoryItem then
+            if ClearCursor then ClearCursor() end
+            PickupContainerItem(bag, slot)
+            if CursorHasItem and CursorHasItem() then
+                PickupInventoryItem(RELIC_SLOT)
+                if CursorHasItem and CursorHasItem() then
+                    -- Put it back if swap failed to avoid cursor lock
+                    PickupContainerItem(bag, slot)
+                end
+            end
+        else
+            UseContainerItem(bag, slot)
+        end
+
+        local equippedNow = GetInventoryItemLink("player", RELIC_SLOT)
+        if not (equippedNow and string_find(equippedNow, itemName, 1, true)) then
+            return false
+        end
         lastEquippedRelic = itemName
 
         if perDur then
@@ -773,10 +836,11 @@ local Original_CastSpellByName = CastSpellByName
 local Original_CastSpell = CastSpell
 local Original_UseAction = UseAction
 
-local function HandleSpellCast(base, rank, spellId)
+local function HandleSpellCast(base, rank, spellId, bookType)
     if not LibramSwapDb.enabled then return end
     if not LibramSwapDb.classMode then return end
-    if not base then return end
+    base = NormalizeSpellName(base)
+    if not base or base == "" then return end
 
     -- any spell cast counts as input
     lastInputTime = GetTime()
@@ -796,7 +860,19 @@ local function HandleSpellCast(base, rank, spellId)
     -- readiness
     local ready
     if spellId then
-        ready = IsSpellReadyById(spellId)
+        local bt = bookType
+        if not bt then
+            local n = GetSpellName(spellId, BOOKTYPE_SPELL)
+            if n == base then
+                bt = BOOKTYPE_SPELL
+            else
+                local pn = GetSpellName(spellId, BOOKTYPE_PET)
+                if pn == base then
+                    bt = BOOKTYPE_PET
+                end
+            end
+        end
+        ready = IsSpellReadyById(spellId, bt)
     else
         local spec = (rank and rank ~= "") and (base .. "(" .. rank .. ")") or base
         ready = IsSpellReady(spec)
@@ -821,11 +897,12 @@ function CastSpellByName(spellName, bookType)
 end
 
 function CastSpell(spellIndex, bookType)
-    if bookType ~= BOOKTYPE_SPELL then
+    local bt = bookType or BOOKTYPE_SPELL
+    if bt ~= BOOKTYPE_SPELL and bt ~= BOOKTYPE_PET then
         return Original_CastSpell(spellIndex, bookType)
     end
-    local name, rank = GetSpellName(spellIndex, BOOKTYPE_SPELL)
-    HandleSpellCast(name, rank, spellIndex)
+    local name, rank = GetSpellName(spellIndex, bt)
+    HandleSpellCast(name, rank, spellIndex, bt)
     return Original_CastSpell(spellIndex, bookType)
 end
 
@@ -836,29 +913,12 @@ function UseAction(slot, checkCursor, onSelf)
 
     local name, rank = GetActionSpellName(slot)
 
-    local spellId = nil
-    if name then
-        for i = 1, 300 do
-            local n, r = GetSpellName(i, BOOKTYPE_SPELL)
-            if not n then break end
-            if n == name and (not rank or rank == "" or r == rank) then
-                spellId = i
-                break
-            end
-        end
-    end
+    local spellId, bookType = FindSpellIdByName(name, rank)
     if not spellId and name then
-        for i = 1, 300 do
-            local n, r = GetSpellName(i, BOOKTYPE_SPELL)
-            if not n then break end
-            if n == name then
-                spellId = i
-                break
-            end
-        end
+        spellId, bookType = FindSpellIdByName(name, nil)
     end
 
-    HandleSpellCast(name, rank, spellId)
+    HandleSpellCast(name, rank, spellId, bookType)
     return Original_UseAction(slot, checkCursor, onSelf)
 end
 
