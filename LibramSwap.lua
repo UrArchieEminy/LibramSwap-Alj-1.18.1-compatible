@@ -523,6 +523,17 @@ local function TargetHealthPct()
     return (UnitHealth("target") / maxHP) * 100
 end
 
+local function MultiLibramResolver()
+    print(LibramSwapDb.consecrationMode)
+    if LibramSwapDb.consecrationMode == "farraki" then
+        return CONSECRATION_FARRAKI
+    elseif LibramSwapDb.consecrationMode == "faithful" then
+        return CONSECRATION_FAITHFUL
+    elseif LibramSwapDb.consecrationMode == "hallowed" then
+        return CONSECRATION_HALLOWED
+    end
+end
+
 -- Per-spell throttle state
 local perSpellHasSwapped = {}
 local perSpellLastSwap   = {}
@@ -813,10 +824,7 @@ LibramSwapFrame:SetScript("OnUpdate", function(self, elapsed)
             end
             lastInputTime = now
         end
-    end
-
     -- PALADIN: idle seal of command
-    if LibramSwapDb.classMode == "paladin" then
         if isUsingCommand and lastInputTime > 0 and (now - lastInputTime) >= IDLE_COMMAND_DELAY then
             local commandLibram = "Libram of Ardour"
             if HasRelic(commandLibram) then
@@ -1032,11 +1040,12 @@ local function HandleLibramSwapCommand(msg)
         end
         if arg == "faithful" or arg == "f" then LibramSwapDb.consecrationMode = "faithful"
         elseif arg == "farraki" or arg == "z" or arg == "zealot" then LibramSwapDb.consecrationMode = "farraki"
-        else if arg == "hallowed" or arg == "h" or arg == "hallowed ground" then LibramSwapDb.consecrationMode = "hallowed"
+        elseif arg == "hallowed" or arg == "h" or arg == "hallowed ground" then LibramSwapDb.consecrationMode = "hallowed"
         else DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r Usage: /ls consecration [faithful / farraki / hallowed]|r"); return end
         
+        local libramName = MultiLibramResolver()
 
-        DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r Consecration set to |cFFFFD700" .. MultiLibramResolver() .. "|r")
+        DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r Consecration set to |cFFFFD700" .. libramName .. "|r")
         ReindexAll()
 
     elseif cmd == "holystrike" or cmd == "hs" then
@@ -1153,15 +1162,6 @@ local function HandleLibramSwapCommand(msg)
     end
 end
 
-local function MultiLibramResolver()
-    if LibramSwapDb.consecrationMode == "farraki" then
-        return CONSECRATION_FARRAKI
-    elseif LibramSwapDb.consecrationMode == "faithful" then
-        return CONSECRATION_FAITHFUL
-    elseif LibramSwapDb.consecrationMode == "hallowed" then
-        return CONSECRATION_HALLOWED
-    end
-end
 
 SLASH_LIBRAMSWAP1 = "/libramswap"
 SLASH_LIBRAMSWAP2 = "/lswap"
