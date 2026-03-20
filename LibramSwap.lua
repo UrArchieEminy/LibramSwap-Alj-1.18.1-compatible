@@ -49,10 +49,12 @@ local lastEquippedRelic = nil
 -- Global (generic) throttle for GCD-based swaps
 local lastSwapTime = 0
 
--- Track idle time and Devotion Aura state (Paladin-only behavior, but state is always present)
+-- Track idle time, Devotion Aura state and seal of Command (Paladin-only behavior, but state is always present)
 local lastInputTime = 0
 local IDLE_DEVOTION_DELAY = 1.5
 local isProvidingDevotionAura = false
+local IDLE_COMMAND_DELAY = 1.5
+local isUsingCommand = false
 
 -- Shaman low-health Rebirth check throttle
 local lastRebirthSwapTime = 0
@@ -69,7 +71,7 @@ LibramSwapDb = LibramSwapDb or {
     classMode = nil,
 
     -- PALADIN choose-one
-    consecrationMode = "faithful", -- faithful | farraki
+    consecrationMode = "faithful", -- faithful | farraki | hallowed
     holyStrikeMode   = "eternal",  -- eternal | radiance
 
     -- DRUID choose-one
@@ -105,6 +107,7 @@ local SPELL_READY_ALLOWANCE = 0.15
 -- =====================
 local CONSECRATION_FAITHFUL = "Libram of the Faithful"
 local CONSECRATION_FARRAKI  = "Libram of the Farraki Zealot"
+local CONSECRATION_HALLOWED = "Libram of Hallowed Ground"
 
 local HOLY_STRIKE_ETERNAL_TOWER = "Libram of the Eternal Tower"
 local HOLY_STRIKE_RADIANCE      = "Libram of Radiance"
@@ -123,7 +126,7 @@ local PALADIN_RELIC_MAP = {
     ["Seal of Wisdom"]                = "Libram of Hope",
     ["Seal of Light"]                 = "Libram of Hope",
     ["Seal of Justice"]               = "Libram of Hope",
-    ["Seal of Command"]               = "Libram of Hope",
+    ["Seal of Command"]               = "Libram of Ardour",
     ["Seal of the Crusader"]          = "Libram of Fervor",
     ["Seal of Righteousness"]         = "Libram of Hope",
     ["Devotion Aura"]                 = "Libram of Truth",
@@ -138,6 +141,7 @@ local PALADIN_RELIC_MAP = {
     ["Greater Blessing of Sanctuary"] = "Libram of Veracity",
     ["Greater Blessing of Light"]     = "Libram of Veracity",
     ["Greater Blessing of Salvation"] = "Libram of Veracity",
+    ["Holy Shock"]                    = "Libram of the Radiant Dawn"
 }
 
 -- =====================
@@ -256,7 +260,7 @@ local function RefreshWatchedNames()
 
     if mode == "paladin" then
         for _, itemName in pairs(PALADIN_RELIC_MAP) do AddWatched(itemName) end
-        AddWatched(CONSECRATION_FAITHFUL); AddWatched(CONSECRATION_FARRAKI)
+        AddWatched(CONSECRATION_FAITHFUL); AddWatched(CONSECRATION_FARRAKI); AddWatched(CONSECRATION_HALLOWED)
         AddWatched(HOLY_STRIKE_ETERNAL_TOWER); AddWatched(HOLY_STRIKE_RADIANCE)
 
     elseif mode == "druid" then
@@ -330,7 +334,7 @@ end
 local function PrintClassCommands(mode)
     if mode == "paladin" then
         DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r Class set to |cFFFFD700PALADIN|r")
-        DEFAULT_CHAT_FRAME:AddMessage("  |cFFFFD700/ls consecration [faithful / farraki]|r")
+        DEFAULT_CHAT_FRAME:AddMessage("  |cFFFFD700/ls consecration [faithful / farraki / hallowed]|r")
         DEFAULT_CHAT_FRAME:AddMessage("  |cFFFFD700/ls holystrike [eternal / radiance]|r")
     elseif mode == "druid" then
         DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r Class set to |cFFFFD700DRUID|r")
@@ -372,6 +376,7 @@ LibramSwapFrame:SetScript("OnEvent", function(_, event)
         ReindexAll()
         lastInputTime = GetTime()
         isProvidingDevotionAura = false
+        isUsingCommand = false
         lastRebirthSwapTime = 0
 
     elseif event == "BAG_UPDATE" then
@@ -596,8 +601,8 @@ local function ResolveRelicForSpell(spellName)
 
     if mode == "paladin" then
         if spellName == "Consecration" then
-            local primary = (LibramSwapDb.consecrationMode == "farraki") and CONSECRATION_FARRAKI or CONSECRATION_FAITHFUL
-            local fallback= (primary == CONSECRATION_FARRAKI) and CONSECRATION_FAITHFUL or CONSECRATION_FARRAKI
+            local primary = MultiLibramResolver()
+            local fallback= (primary == CONSECRATION_FARRAKI) and CONSECRATION_FAITHFUL
             if HasRelic(primary) then return primary end
             if HasRelic(fallback) then return fallback end
             return nil
@@ -810,6 +815,17 @@ LibramSwapFrame:SetScript("OnUpdate", function(self, elapsed)
         end
     end
 
+    -- PALADIN: idle seal of command
+    if LibramSwapDb.classMode == "paladin" then
+        if isUsingCommand and lastInputTime > 0 and (now - lastInputTime) >= IDLE_COMMAND_DELAY then
+            local commandLibram = "Libram of Ardour"
+            if HasRelic(commandLibram) then
+                EquipRelicForSpell("Seal of Command", commandLibram)
+            end
+            lastInputTime = now
+        end
+    end
+
     -- SHAMAN: low HP + Reincarnation ready -> Totem of Rebirth
     if LibramSwapDb.classMode == "shaman" then
         if (now - lastRebirthSwapTime) >= REBIRTH_CHECK_THROTTLE then
@@ -851,6 +867,15 @@ local function HandleSpellCast(base, rank, spellId, bookType)
             isProvidingDevotionAura = true
         elseif string_find(base, "Aura", 1, true) then
             isProvidingDevotionAura = false
+        end
+    end
+
+    -- Paladin-only: track if using Seal of Command
+    if LibramSwapDb.classMode == "paladin" then
+        if base == "Seal of Command" then
+            isUsingCommand = true
+        elseif string_find(base, "Seal", 1, true) or string_find(base, "Judgement", 1, true) then
+            isUsingCommand = false
         end
     end
 
@@ -944,7 +969,7 @@ local function printStatus()
     DEFAULT_CHAT_FRAME:AddMessage("  Class ruleset: |cFFFFD700" .. string.upper(LibramSwapDb.classMode) .. "|r")
 
     if LibramSwapDb.classMode == "paladin" then
-        local consec = (LibramSwapDb.consecrationMode == "farraki") and CONSECRATION_FARRAKI or CONSECRATION_FAITHFUL
+        local consec = MultiLibramResolver()
         local hs     = (LibramSwapDb.holyStrikeMode == "radiance") and HOLY_STRIKE_RADIANCE or HOLY_STRIKE_ETERNAL_TOWER
         DEFAULT_CHAT_FRAME:AddMessage("  Consecration: |cFFFFD700" .. consec .. "|r")
         DEFAULT_CHAT_FRAME:AddMessage("  Holy Strike:  |cFFFFD700" .. hs .. "|r")
@@ -991,6 +1016,7 @@ local function HandleLibramSwapCommand(msg)
             LibramSwapDb.classMode = arg
             DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r Class ruleset set to |cFFFFD700" .. string.upper(arg) .. "|r")
             isProvidingDevotionAura = false
+            isUsingCommand = false
             lastInputTime = GetTime()
             lastRebirthSwapTime = 0
             ReindexAll()
@@ -1006,8 +1032,11 @@ local function HandleLibramSwapCommand(msg)
         end
         if arg == "faithful" or arg == "f" then LibramSwapDb.consecrationMode = "faithful"
         elseif arg == "farraki" or arg == "z" or arg == "zealot" then LibramSwapDb.consecrationMode = "farraki"
-        else DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r Usage: /ls consecration [faithful / farraki]|r"); return end
-        DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r Consecration set to |cFFFFD700" .. ((LibramSwapDb.consecrationMode=="farraki") and CONSECRATION_FARRAKI or CONSECRATION_FAITHFUL) .. "|r")
+        else if arg == "hallowed" or arg == "h" or arg == "hallowed ground" then LibramSwapDb.consecrationMode = "hallowed"
+        else DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r Usage: /ls consecration [faithful / farraki / hallowed]|r"); return end
+        
+
+        DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r Consecration set to |cFFFFD700" .. MultiLibramResolver() .. "|r")
         ReindexAll()
 
     elseif cmd == "holystrike" or cmd == "hs" then
@@ -1121,6 +1150,16 @@ local function HandleLibramSwapCommand(msg)
 
     else
         DEFAULT_CHAT_FRAME:AddMessage("|cFFAAAAFF[LibramSwap]:|r |cFFFF5555Unknown command. Type '/ls help' for usage.|r")
+    end
+end
+
+local function MultiLibramResolver()
+    if LibramSwapDb.consecrationMode == "farraki" then
+        return CONSECRATION_FARRAKI
+    elseif LibramSwapDb.consecrationMode == "faithful" then
+        return CONSECRATION_FAITHFUL
+    elseif LibramSwapDb.consecrationMode == "hallowed" then
+        return CONSECRATION_HALLOWED
     end
 end
 
