@@ -888,6 +888,8 @@ local function HandleSpellCast(base, rank, spellId, bookType)
     else
         EquipRelicForSpell(base, relic)
     end
+    local start = GetTime()
+    while GetTime() - start < 0.035 do end
 end
 
 function CastSpellByName(spellName, bookType)
