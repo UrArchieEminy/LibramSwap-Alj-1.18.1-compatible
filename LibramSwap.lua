@@ -141,7 +141,9 @@ local PALADIN_RELIC_MAP = {
     ["Greater Blessing of Sanctuary"] = "Libram of Veracity",
     ["Greater Blessing of Light"]     = "Libram of Veracity",
     ["Greater Blessing of Salvation"] = "Libram of Veracity",
-    ["Holy Shock"]                    = "Libram of the Radiant Dawn"
+    ["Holy Shock"]                    = "Libram of the Radiant Dawn",
+    ["Exorcism"]                      = "Libram of the Exorciser",
+    ["Holy Wrath"]                    = "Libram of the Exorciser"
 }
 
 -- =====================
@@ -524,7 +526,6 @@ local function TargetHealthPct()
 end
 
 local function MultiLibramResolver()
-    print(LibramSwapDb.consecrationMode)
     if LibramSwapDb.consecrationMode == "farraki" then
         return CONSECRATION_FARRAKI
     elseif LibramSwapDb.consecrationMode == "faithful" then
